@@ -1,4 +1,3 @@
-
 #include "GameScene.h"
 
 USING_NS_CC;
@@ -15,34 +14,65 @@ bool GameScene::init()
 
     auto size = Director::getInstance()->getVisibleSize();
 
-    addChild(LayerColor::create(
-        Color4B(12, 15, 35, 255)
-    ));
+    addChild(LayerColor::create(Color4B(12, 15, 35, 255)));
 
-    // Chão
     ground = DrawNode::create();
-
     ground->drawSolidRect(
         Vec2(0, 0),
         Vec2(size.width, 65),
         Color4F(0.05f, 0.8f, 1.0f, 1.0f)
     );
-
     addChild(ground);
 
-    // Cubo
     cube = DrawNode::create();
-
     cube->drawSolidRect(
         Vec2(-20, -20),
         Vec2(20, 20),
         Color4F(0.1f, 1.0f, 0.8f, 1.0f)
     );
-
     cube->setPosition(100, 85);
     addChild(cube, 5);
 
-    // Obstáculo
+    scoreLabel = Label::createWithSystemFont("0", "Arial", 30);
+    scoreLabel->setPosition(size.width - 45, size.height - 40);
+    addChild(scoreLabel, 10);
+
+    auto instruction = Label::createWithSystemFont(
+        "TOQUE PARA PULAR", "Arial", 18
+    );
+    instruction->setPosition(size.width / 2, size.height - 45);
+    addChild(instruction);
+
+    spawnObstacle();
+
+    auto touch = EventListenerTouchOneByOne::create();
+    touch->onTouchBegan = [this](Touch*, Event*)
+    {
+        if (gameOver)
+            restart();
+        else
+            jump();
+
+        return true;
+    };
+    _eventDispatcher->addEventListenerWithSceneGraphPriority(touch, this);
+
+    scheduleUpdate();
+    return true;
+}
+
+void GameScene::jump()
+{
+    if (onGround && !gameOver)
+    {
+        velocityY = 650.0f;
+        onGround = false;
+    }
+}
+
+void GameScene::spawnObstacle()
+{
+    auto size = Director::getInstance()->getVisibleSize();
     auto obstacle = DrawNode::create();
 
     Vec2 triangle[] = {
@@ -51,63 +81,56 @@ bool GameScene::init()
         Vec2(0, 45)
     };
 
-    obstacle->drawSolidPoly(
-        triangle,
-        3,
-        Color4F::RED
-    );
-
-    obstacle->setPosition(size.width - 100, 65);
-    addChild(obstacle);
-
-    auto instruction = Label::createWithSystemFont(
-        "TOQUE PARA PULAR",
-        "Arial",
-        18
-    );
-
-    instruction->setPosition(
-        size.width / 2,
-        size.height - 45
-    );
-
-    addChild(instruction);
-
-    auto touch = EventListenerTouchOneByOne::create();
-
-    touch->onTouchBegan = [this](Touch*, Event*)
-    {
-        if (gameOver)
-        {
-            restart();
-            return true;
-        }
-
-        jump();
-        return true;
-    };
-
-    _eventDispatcher->addEventListenerWithSceneGraphPriority(
-        touch,
-        this
-    );
-
-    scheduleUpdate();
-
-    return true;
-}
-
-void GameScene::jump()
-{
-    if (onGround)
-    {
-        velocityY = 650;
-        onGround = false;
-    }
+    obstacle->drawSolidPoly(triangle, 3, Color4F(1.0f, 0.2f, 0.25f, 1.0f));
+    obstacle->setPosition(size.width + 35, 65);
+    obstacle->setTag(1); // ainda não foi ultrapassado
+    addChild(obstacle, 4);
+    obstacles.push_back(obstacle);
 }
 
 void GameScene::updateGame(float dt)
 {
+    auto size = Director::getInstance()->getVisibleSize();
+
+    obstacleTimer += dt;
+    if (obstacleTimer >= 1.55f)
+    {
+        obstacleTimer = 0.0f;
+        spawnObstacle();
+    }
+
+    for (auto it = obstacles.begin(); it != obstacles.end();)
+    {
+        auto obstacle = *it;
+        auto pos = obstacle->getPosition();
+        pos.x -= obstacleSpeed * dt;
+        obstacle->setPosition(pos);
+
+        if (obstacle->getBoundingBox().intersectsRect(cube->getBoundingBox()))
+        {
+            endGame();
+            return;
+        }
+
+        if (obstacle->getTag() == 1 && pos.x < cube->getPositionX())
+        {
+            obstacle->setTag(0);
+            ++score;
+            scoreLabel->setString(StringUtils::format("%d", score));
+            if (score % 5 == 0)
+                obstacleSpeed += 15.0f;
+        }
+
+        if (pos.x < -50)
+        {
+            removeChild(obstacle);
+            it = obstacles.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 void GameScene::update(float dt)
@@ -115,26 +138,43 @@ void GameScene::update(float dt)
     if (gameOver)
         return;
 
-    auto size = Director::getInstance()->getVisibleSize();
+    velocityY -= 1600.0f * dt;
 
-    velocityY -= 1600 * dt;
-
-    Vec2 pos = cube->getPosition();
+    auto pos = cube->getPosition();
     pos.y += velocityY * dt;
 
-    if (pos.y <= 85)
+    if (pos.y <= 85.0f)
     {
-        pos.y = 85;
-        velocityY = 0;
+        pos.y = 85.0f;
+        velocityY = 0.0f;
         onGround = true;
     }
 
     cube->setPosition(pos);
+    updateGame(dt);
+}
+
+void GameScene::endGame()
+{
+    if (gameOver)
+        return;
+
+    gameOver = true;
+
+    auto size = Director::getInstance()->getVisibleSize();
+    gameOverLabel = Label::createWithSystemFont(
+        "FIM DE JOGO\nTOQUE PARA REINICIAR",
+        "Arial",
+        30
+    );
+    gameOverLabel->setAlignment(TextHAlignment::CENTER);
+    gameOverLabel->setPosition(size.width / 2, size.height / 2);
+    addChild(gameOverLabel, 20);
 }
 
 void GameScene::restart()
 {
     Director::getInstance()->replaceScene(
-        GameScene::createScene()
+        TransitionFade::create(0.2f, GameScene::createScene())
     );
 }
