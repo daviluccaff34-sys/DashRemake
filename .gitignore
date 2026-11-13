@@ -1,0 +1,8 @@
+.DS_Store
+*.log
+*.tmp
+build/
+Game/build/
+Game/proj.android/.gradle/
+Game/proj.android/build/
+Game/proj.android/app/build/
