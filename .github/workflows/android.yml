@@ -1,0 +1,53 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Game/**"
+      - "cocos2d-x"
+      - ".gitmodules"
+      - ".github/workflows/android.yml"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout project and Cocos2d-x submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-28" "build-tools;28.0.3" "ndk;20.1.5948944" "cmake;3.10.2.4988404"
+
+      - name: Build debug APK
+        working-directory: Game/proj.android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/20.1.5948944
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/20.1.5948944
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DashRemake-debug
+          path: Game/proj.android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
